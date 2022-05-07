@@ -589,3 +589,6 @@ p4 <- cluster_mean_graph(happi_2020_k2, happi_2020_k2$ESI)+ labs(y = "Economic S
 
 p1 + p2 + p3 + p4 + plot_layout(guides = "collect") & ylim(c(-1.0,1))
 ```
+#Improvements
+First, all the four indices related to COVID-19 are simple averages of the individual component indicators,which might arouse the problem that the significance of some indicators can not be represented through the calculation. Therefore, some indicators might need to be weighted.
+Second, indicators here are ordinary, so that they fail to reflect their true intensity. For example, income support is also relative to the amount of support.
