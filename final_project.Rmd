@@ -22,15 +22,6 @@ library(factoextra)
 library(corrplot)
 ```
 
-#Data Sources
-
-For this analysis, we combine two data sources. The first one is The World Happiness Report 2019 and 2020, a landmark survey of the state of global happiness that ranks worldwide countries by how happy their citizens perceive themselves to be. Among the variables, the happiness score is a national average of the responses to the main life evaluation question asked in the Gallup World Poll (GWP), which uses the Cantril Ladder. Happiness score can be explained by the other six factors, namely  GDP per capita, Healthy Life Expectancy, Social support, Freedom to make life choices, Generosity, and Corruption Perception, which are also included in the dataset.
-
-The second source is the database of variation in government responses to COVID-19 from 2020 to now collected by the Oxford COVID-19 Government Response Tracker (OXCGRT), providing a systematic cross-national, cross-temporal measure to understand how government responses have evolved over the full period of the disease’s spread. It also offered the composition and calculation of several policy indices, among which we took advantage of 4 indices, namely government response index, containment and health index, stringency index and economic support index.
-
-Github Repo: final_project
-
-
 # Part I. Data cleaning
 
 ```{r}
@@ -138,8 +129,6 @@ cor_whs <- cor(whs2019cor)
 corrplot(cor_whs, method = "color") + 
   theme_void()
 ```
-The heatmap represents the correlation between seven variables. They are happiness, logged gdp per capita, social support, healthy life expectancy, freedom to make life choices, generosity and perceptions of corruption respectively. Dark blue is the sign of strong positive correlation and dark red means strong negative correlation.  Happiness, logged gdp per capita, social support and healthy life expectancy have rather strong correlations with each other, for their covariances are all higher than 0.4. Perceptions of corruption are negatively correlated with other six variables and the covariances are located between -0.2 and -0.4.
-
 
 ### B.
  
@@ -181,5 +170,223 @@ ggplot(whs2019_geometry) +
   )
 
 ```
-We only used World Happiness Report 2019 from the first dataset to draw a world map with the degree of happiness in 2019. In the map, dark orange stands for lower level of happiness, and vice versa. It is clear that North America, Western Europe and Australia where wealthy countries concentrate are endowed with much higher levels of happiness than those parts of the world with middle-income and low-income countries.
+
+
+
+# Part III. Choosing the best model using the data of world happiness report of 2019
+
+
+```{r split the  data, message=FALSE, warning=FALSE}
+# set the seed
+set.seed(20211101)
+
+# split the data
+split <- initial_split(whs2019)
+whs19_train <- training(split)
+whs19_test <- testing(split)
+```
+
+```{r set up folds, message=FALSE, warning=FALSE}
+# set the seed
+set.seed(20211101)
+
+# set up v-fold cross-validation
+folds <- vfold_cv(data = whs19_train, v = 10)
+```
+
+```{r create a recipe }
+# create a recipe
+whs_rec <- 
+  recipe(happiness ~ ., data = whs19_train) %>%
+  # select all numeric variables and remove covid-related variables
+  step_rm(country_name, regional_indicator, country_code) %>%
+  
+  # center and scale predictors
+  step_center(all_numeric_predictors()) %>%
+  step_scale(all_numeric_predictors()) %>%
+  prep()
+  
+# see the engineered training data
+bake(prep(whs_rec, data = whs19_train), new_data = whs19_train)
+```
+
+### Model A. Random Forest
+
+```{r set up for the model, message=FALSE, warning=FALSE}
+# number of features in the dataset
+n_features <- length(setdiff(names(whs19_train), "happiness"))
+
+# create hyperparameter grid for random forest model
+rf_grid <- expand.grid(
+  mtry = floor(n_features * c(.05, .15, .25, .333, .4)),
+  min_n = c(1, 3, 5, 10)
+)
+```
+
+```{r create a Random Forest model, message=FALSE, warning=FALSE}
+# create a model
+rf_mod <- rand_forest(
+  mtry = tune(),
+  trees = n_features * 10,
+  min_n = tune()
+) %>%
+  set_engine("ranger") %>%
+  set_mode("regression")
+```
+
+```{r create the workflow for Random Forest model, message=FALSE, warning=FALSE}
+# create a workflow
+rf_wf <- workflow() %>%
+  add_recipe(whs_rec) %>%
+  add_model(rf_mod)
+```
+
+```{r fit the Random Forest model, message=FALSE, warning=FALSE}
+# fit the model
+rf_cv <- rf_wf %>%
+  tune_grid(
+    resamples = folds,
+    grid = rf_grid
+  )
+```
+
+```{r select the best parameter for Random Forest model, message=FALSE, warning=FALSE}
+# select the best model based on the "rmse" metric
+rf_best <- rf_cv %>%
+  select_best(metric = "rmse")
+```
+
+```{r update the workflow for the Random Forest model, message=FALSE, warning=FALSE}
+# use the best model to update the workflow
+rf_final <- finalize_workflow(
+  rf_wf,
+  parameters = rf_best
+)
+```
+
+```{r fit the resample using the best parameter, message=FALSE, warning=FALSE}
+# use the best parameter to fit the resamples
+rf_fit <- rf_final %>%
+  fit_resamples(
+    resamples = folds) %>%
+  collect_metrics() %>%
+  filter(.metric == "rmse")
+  
+ 
+# select the MSE for each resample
+print(rf_fit) 
+```
+
+```{r fit the entire training data for Random Forest model, message=FALSE, warning=FALSE}
+# use the best parameter of Random Forest model to fit the entire training data
+rf_fittrain <-
+  rf_wf %>%
+  finalize_workflow(parameters = rf_best) %>%
+  fit(data = whs19_train) 
+```
+
+```{r make predictions using testing data, message=FALSE, warning=FALSE}
+# make predictions with the testing data
+pred_testrf <-
+  bind_cols(
+    whs19_test,
+    predict(rf_fittrain, new_data = whs19_test)
+  )
+
+select(pred_testrf, .pred, happiness)
+```
+
+```{r calculate the RMSE, message=FALSE, warning=FALSE}
+# calculate the RMSE on the testing data
+rmse(data = pred_testrf, truth = happiness, estimate = .pred)
+```
+
+### Model B: Lasso
+
+```{r}
+# set the tunning grid for lasso model
+lasso_grid <- grid_regular(penalty(), levels = 10)
+```
+
+```{r}
+# create the lasso model
+lasso_mod <- linear_reg(
+  penalty = tune(),
+  mixture = 1
+  ) %>%
+  set_engine("glmnet")
+```
+
+
+```{r}
+# create the workflow for lasso model
+lasso_wf <- workflow() %>%
+  add_recipe(whs_rec) %>%
+  add_model(lasso_mod)
+```
+
+```{r}
+# fit the resamples
+lasso_cv <- lasso_wf %>%
+  tune_grid(
+    resample = folds,
+    grid = lasso_grid
+    )
+```
+
+```{r}
+# choose the best parameter
+lasso_best <- lasso_cv %>%
+  select_best(metric = "rmse")
+```
+
+
+```{r}
+# use the best model to update the workflow
+lasso_final <- finalize_workflow(
+  lasso_wf,
+  parameters = lasso_best
+)
+```
+
+
+```{r}
+# use the best parameter to fit the  whole training set
+lasso_final2 <- lasso_wf %>%
+  finalize_workflow(parameters = lasso_best) %>%
+  fit(data = whs19_train)
+```
+
+
+```{r}
+# using the best model to fit the whole testing dataset 
+pred_testlasso <-
+  bind_cols(
+    whs19_test,
+    predict(lasso_final2, new_data = whs19_test)
+  )
+```
+
+
+```{r}
+# calculate the rmse
+select(pred_testlasso, .pred, happiness)
+
+rmse(data = pred_testlasso, truth = happiness, estimate = .pred)
+```
+
+As Random Forest Model returns lower rmse, we choose it as our machine learning model to predict the happiness in 2020 for each country.
+
+# Part IV. Predict
+ 
+```{r implement using Random Forest model , message=FALSE, warning=FALSE}
+# make predictions for 2020 happiness score
+happi_2020 <- bind_cols(
+    whs2020,
+    predict(object = rf_fittrain, new_data = whs2020)
+  )
+
+happi_2020 <- happi_2020 %>%
+  rename("happiness" = ".pred")
+```
 
