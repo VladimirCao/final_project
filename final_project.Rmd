@@ -494,6 +494,7 @@ ggplot(data = whs2020_geometry) +
   )
   
 ```
+The light green indicates the cluster of countries with higher levels of happiness, mainly composed of Western European countries, North America and Australia, which are rich countries. The medium green is on behalf of the cluster of nations with lowest levels of happiness, like Africa  where many poverty-stricken countries are located. Besides, the dark green represents those countries with medium degree of happiness, consisting of the middle-income countries, South America, East, Southeastern as well as Northern Asia and East Europe.
 
 
 ```{r}
