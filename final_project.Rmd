@@ -390,3 +390,201 @@ happi_2020 <- happi_2020 %>%
   rename("happiness" = ".pred")
 ```
 
+# Part V. Cluster analysis
+
+### A. Data visualizations
+
+```{r, message=FALSE, warning=FALSE}
+# add covid policies index to our predictive dataset
+happi_2020 <- happi_2020 %>%
+  select(-country_name) %>%
+  inner_join(covid2020, by = "country_code") %>%
+  na.omit()
+```
+
+
+```{r}
+p1 <- happi_2020 %>% ggplot(aes(x = ESI, y = happiness)) +
+  geom_point() +
+  geom_smooth(method = "lm",formula = y ~ x)
+
+p2 <- happi_2020 %>% ggplot(aes(x = SI, y = happiness)) +
+  geom_point() +
+  geom_smooth(method = "lm",formula = y ~ x)
+
+p3 <- happi_2020 %>% ggplot(aes(x = GRI, y = happiness)) +
+  geom_point() +
+  geom_smooth(method = "lm",formula = y ~ x)
+
+p4 <- happi_2020 %>% ggplot(aes(x = CHI, y = happiness)) +
+  geom_point() +
+  geom_smooth(method = "lm",formula = y ~ x)
+
+p1 + p2 + p3 + p4 & theme_minimal() & labs(y = "Happiness")
+
+```
+
+
+```{r prepare for cluster analysis}
+# Select numeric value
+happi_2020_num <- data.matrix(select(happi_2020, -c(country_name, regional_indicator, country_code)))
+
+# Scale the dataset to be on the same unit
+happi_2020_scale <- as.data.frame(scale(happi_2020_num))
+
+# add more weight to the happi_2020 dataset
+happi_2020_scale <- happi_2020_scale %>%
+  mutate(
+    happiness = happiness * 3
+  )
+
+# add country_name to it
+happi_2020_scale2 <- bind_cols(
+  happi_2020_scale,
+  happi_2020$country_name) %>%
+  rename("country_name" = "...12")
+```
+
+
+```{r pick the number of clusters, message=FALSE, warning=FALSE}
+# pick the number of clusters
+set.seed(20220501)
+
+# Calculate total within sum of squares
+fviz_nbclust(happi_2020_scale, FUN = kmeans, method = "wss")
+
+# Calculate silhouette distance
+fviz_nbclust(happi_2020_scale, FUN = kmeans, method = "silhouette")
+
+# Calculate gap statistics
+fviz_nbclust(happi_2020_scale, FUN = kmeans, method = "gap_stat")
+```
+
+Given that we think we need to explore the common points behind the covid policy index of countries at different levels of happiness groups, we would like to use 3 as the number of our clusters.
+
+
+```{r}
+# Run the kmeans model
+whs2020_kmeans3 <- kmeans(happi_2020_scale, centers = 3, nstart = 100)
+
+#create new data frame to combine all relevant variables
+whs2020_clusters <- 
+  bind_cols(happi_2020_scale2,
+            cluster3 = whs2020_kmeans3$cluster)
+
+# add country_code back to the dataset
+whs2020_clusters <- left_join(whs2020_clusters, code_index, by = "country_name")
+```
+
+
+```{r}
+# add geometry to the dataset
+whs2020_geometry <- left_join(world_map, whs2020_clusters, by = "country_code") %>%
+  na.omit()
+
+# draw the map
+ggplot(data = whs2020_geometry) +
+  geom_sf(aes(fill = factor(cluster3))) +
+  scale_fill_brewer(palette = "Set4") +
+  theme_void() +
+  labs(
+    fill = "cluster",
+    title = "Rich countries have higher level of happiness",
+    subtitle = "2020"
+  )
+  
+```
+
+
+```{r}
+fviz_cluster(whs2020_kmeans3, 
+               data = happi_2020_scale,
+               repel = TRUE,
+               alpha = 0.5) +
+    labs(title = sprintf("K-Means with K = 3 and PCA"),
+         ) +
+    theme_minimal() 
+```
+
+
+```{r}
+# map the clusters by happiness
+ggplot(data = whs2020_clusters, 
+       mapping = aes(x = cluster3,
+                     y = happiness,
+                     fill = factor(cluster3))) +
+  geom_boxplot(width = 0.5,
+               alpha = 0.4) +
+  scale_fill_manual(name = "Cluster",
+                    values = c("1" = "#FF4040",
+                               "2" = "#00FFFF",
+                               "3" = "#76EE00")) +
+  theme(panel.background = element_blank(),
+         axis.line.x = element_line(linetype = 1),
+         axis.line.y = element_line(linetype = 1)) +
+   labs(title = "Happiness on Clusters",
+        y = "Happiness",
+        x = NULL)
+```
+
+
+
+
+
+
+
+
+```{r construct a function to get the mean within each cluster groups}
+# create a function to get the mean within each cluster groups
+cluster_analysis_mean <- function(df, k) {
+  # Run the kmeans model
+  happi_2020_km <- kmeans(df, k, nstart = 100)
+  
+  # Return the dataframe with cluster groups and their mean of each columns within group
+  happi_2020kmcluster <- df %>%
+    group_by(happi_2020_km$cluster) %>%
+    summarise_all(mean)
+  
+  return(happi_2020kmcluster)
+}
+```
+
+
+```{r apply the above function}
+happi_2020_k2 <- cluster_analysis_mean(happi_2020_scale, 3) %>%
+  rename("cluster" = "happi_2020_km$cluster")
+```
+
+
+```{r construct a function to compare the mean of covid-related index within each cluster group}
+# construct a function that draw the graph to compare the covid response index
+cluster_mean_graph <- function(df, var) {
+  df %>% 
+    ggplot() +
+    geom_bar(aes(x = reorder(factor(cluster), var),
+                 y = var,
+                 fill = factor(cluster)),
+             stat = "identity",
+             legend = FALSE) +
+    scale_fill_brewer(palette = "Set2") +
+    theme_minimal() +
+    labs(x = "",
+         fill = "Cluster")
+}
+```
+
+
+```{r}
+# draw the graph to compare the covid response index
+
+p1 <- cluster_mean_graph(happi_2020_k2, happi_2020_k2$SI) + labs(y = "Stringency Index")
+
+p2 <- cluster_mean_graph(happi_2020_k2, happi_2020_k2$GRI)+ labs(y = "Government Response Index")
+
+p3 <- cluster_mean_graph(happi_2020_k2, happi_2020_k2$CHI)+ labs(y = "Containment and Health Index")
+
+p4 <- cluster_mean_graph(happi_2020_k2, happi_2020_k2$ESI)+ labs(y = "Economic Support Index")
+
+
+p1 + p2 + p3 + p4 + plot_layout(guides = "collect") & ylim(c(-1.0,1))
+```
