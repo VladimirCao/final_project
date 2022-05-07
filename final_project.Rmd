@@ -113,3 +113,62 @@ whs2019 <- whs2019 %>%
 whs2020 <- whs2020 %>%
   left_join(code_index, by = "country_name")
 ```
+
+# Part II. Data Visualzation  
+
+### A.
+
+```{r}
+whs2019cor <- whs2019 %>%
+  select_if(is.numeric)
+```
+
+```{r}
+# computing correlation matrix
+cor_whs <- cor(whs2019cor)
+corrplot(cor_whs, method = "color") + 
+  theme_void()
+```
+
+### B.
+ 
+```{r}
+# load the world map data
+world <- ne_countries(scale = "medium", returnclass = "sf")
+```
+
+
+```{r}
+# clean the world map dataset
+world_map <- world %>%
+  select(admin, adm0_a3, geometry) %>%
+  rename(
+    "country_name" = "admin",
+    "country_code" = "adm0_a3"
+  ) %>%
+  st_transform(crs = 4326)
+```
+
+
+```{r}
+# match two dataset
+whs2019_geometry <- left_join(world_map, whs2019, by = "country_code") %>%
+  na.omit()
+```
+
+
+```{r}
+# draw the hapiness index map
+ggplot(whs2019_geometry) +
+  geom_sf(aes(fill = happiness)) +
+  scale_fill_distiller(palette = "YlOrBr") +
+  theme_void() +
+  labs(
+    title = "Rich countries have higher level of happiness",
+    subtitle = "2019",
+    caption = "World Hapiness Report 2019"
+  )
+
+```
+
+
