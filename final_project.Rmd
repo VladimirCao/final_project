@@ -1,0 +1,115 @@
+---
+title: "project_19_fit20"
+author: "Xiaolin Zheng, Sheng Cao, Xiangting Ye, Tianjiao Gao"
+date: "4/30/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+````{r}
+library(tidyverse)
+library(lubridate)
+library(sf)
+library(rnaturalearthdata)
+library(rnaturalearth)
+library(munsell)
+library(patchwork)
+library(tidymodels)
+library(factoextra)
+library(corrplot)
+```
+
+# Part I. Data cleaning
+
+```{r}
+# load the data
+whs2019 <- read_csv("2019.csv")
+whs2020 <- read_csv("2020.csv")
+covid2020 <- read_csv("OxCGRT_withnotes_2020.csv")
+```
+
+```{r}
+# Data cleaning for whs2019 dataset
+  
+  # Clean the variable names
+  whs2019 <- whs2019 %>%
+  janitor::clean_names()
+
+  # Select the variables
+  whs2019 <- whs2019 %>%
+    select(country_name, regional_indicator, ladder_score, logged_gdp_per_capita, social_support, healthy_life_expectancy, freedom_to_make_life_choices, generosity, perceptions_of_corruption) %>%
+    rename("happiness" = "ladder_score")
+  
+  # Delete the missing values
+  whs2019 <- whs2019 %>%
+    na.omit()
+
+#write.csv(whs2019, file = "whs2019_update.csv")
+```
+
+```{r}
+# Data cleaning for whs2020 dataset
+  
+  # Clean the variable names
+  whs2020 <- whs2020 %>%
+  janitor::clean_names()
+
+  # Select the variables
+  whs2020 <- whs2020 %>%
+    select(country_name, regional_indicator, logged_gdp_per_capita, social_support, healthy_life_expectancy, freedom_to_make_life_choices, generosity, perceptions_of_corruption) 
+
+  # Delete the missing values
+  whs2020 <- whs2020 %>%
+    na.omit()
+  
+```
+
+```{r}
+# Data cleaning for covid2020 dataset
+
+  # clean the data variable name
+  covid2020 <- covid2020 %>%
+    janitor::clean_names()
+  
+  # select and rename variables
+  covid2020 <- covid2020 %>%
+    select(c("country_name", "country_code", "region_name", "stringency_index_for_display", "government_response_index_for_display", "containment_health_index_for_display", "economic_support_index_for_display")) %>%
+    rename(
+      "SI" = "stringency_index_for_display",
+      "GRI" = "government_response_index_for_display",
+      "CHI" = "containment_health_index_for_display",
+      "ESI" = "economic_support_index_for_display"
+        )
+  
+  # group by country
+  covid2020 <- covid2020 %>%
+    group_by(country_name, country_code) %>%
+    summarize(
+      SI = mean(SI, na.rm = TRUE),
+      GRI = mean(GRI, na.rm = TRUE),
+      CHI = mean(CHI, na.rm = TRUE),
+      ESI = mean(ESI, na.rm = TRUE)
+    )
+```
+
+```{r}
+# create the country code index
+code_index <- covid2020 %>%
+  select(country_name, country_code)
+```
+
+
+```{r}
+# add country code column to whs2019 so that we can match whs2019 to the geometry dataset using the country code
+whs2019 <- whs2019 %>%
+  left_join(code_index, by = "country_name")
+```
+
+```{r}
+# add country code column to whs2019 so that we can match whs2019 to the geometry dataset using the country code
+whs2020 <- whs2020 %>%
+  left_join(code_index, by = "country_name")
+```

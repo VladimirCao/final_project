@@ -1,0 +1,594 @@
+---
+title: "project_19_fit20"
+author: "Xiaolin Zheng, Sheng Cao, Xiangting Ye, Tianjiao Gao"
+date: "4/30/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+````{r}
+library(tidyverse)
+library(lubridate)
+library(sf)
+library(rnaturalearthdata)
+library(rnaturalearth)
+library(munsell)
+library(patchwork)
+library(tidymodels)
+library(factoextra)
+library(corrplot)
+```
+
+# Part I. Data cleaning
+
+```{r}
+# load the data
+whs2019 <- read_csv("2019.csv")
+whs2020 <- read_csv("2020.csv")
+covid2020 <- read_csv("OxCGRT_withnotes_2020.csv")
+```
+
+```{r}
+# Data cleaning for whs2019 dataset
+  
+  # Clean the variable names
+  whs2019 <- whs2019 %>%
+  janitor::clean_names()
+
+  # Select the variables
+  whs2019 <- whs2019 %>%
+    select(country_name, regional_indicator, ladder_score, logged_gdp_per_capita, social_support, healthy_life_expectancy, freedom_to_make_life_choices, generosity, perceptions_of_corruption) %>%
+    rename("happiness" = "ladder_score")
+  
+  # Delete the missing values
+  whs2019 <- whs2019 %>%
+    na.omit()
+
+#write.csv(whs2019, file = "whs2019_update.csv")
+```
+
+```{r}
+# Data cleaning for whs2020 dataset
+  
+  # Clean the variable names
+  whs2020 <- whs2020 %>%
+  janitor::clean_names()
+
+  # Select the variables
+  whs2020 <- whs2020 %>%
+    select(country_name, regional_indicator, logged_gdp_per_capita, social_support, healthy_life_expectancy, freedom_to_make_life_choices, generosity, perceptions_of_corruption) 
+
+  # Delete the missing values
+  whs2020 <- whs2020 %>%
+    na.omit()
+  
+```
+
+```{r}
+# Data cleaning for covid2020 dataset
+
+  # clean the data variable name
+  covid2020 <- covid2020 %>%
+    janitor::clean_names()
+  
+  # select and rename variables
+  covid2020 <- covid2020 %>%
+    select(c("country_name", "country_code", "region_name", "stringency_index_for_display", "government_response_index_for_display", "containment_health_index_for_display", "economic_support_index_for_display")) %>%
+    rename(
+      "SI" = "stringency_index_for_display",
+      "GRI" = "government_response_index_for_display",
+      "CHI" = "containment_health_index_for_display",
+      "ESI" = "economic_support_index_for_display"
+        )
+  
+  # group by country
+  covid2020 <- covid2020 %>%
+    group_by(country_name, country_code) %>%
+    summarize(
+      SI = mean(SI, na.rm = TRUE),
+      GRI = mean(GRI, na.rm = TRUE),
+      CHI = mean(CHI, na.rm = TRUE),
+      ESI = mean(ESI, na.rm = TRUE)
+    )
+```
+
+```{r}
+# create the country code index
+code_index <- covid2020 %>%
+  select(country_name, country_code)
+```
+
+
+```{r}
+# add country code column to whs2019 so that we can match whs2019 to the geometry dataset using the country code
+whs2019 <- whs2019 %>%
+  left_join(code_index, by = "country_name")
+```
+
+```{r}
+# add country code column to whs2019 so that we can match whs2019 to the geometry dataset using the country code
+whs2020 <- whs2020 %>%
+  left_join(code_index, by = "country_name")
+```
+
+# Part II. Data Visualzation  
+
+### A.
+
+```{r}
+whs2019cor <- whs2019 %>%
+  select_if(is.numeric)
+```
+
+```{r}
+# computing correlation matrix
+cor_whs <- cor(whs2019cor)
+corrplot(cor_whs, method = "color") + 
+  theme_void()
+```
+
+### B.
+ 
+```{r}
+# load the world map data
+world <- ne_countries(scale = "medium", returnclass = "sf")
+```
+
+
+```{r}
+# clean the world map dataset
+world_map <- world %>%
+  select(admin, adm0_a3, geometry) %>%
+  rename(
+    "country_name" = "admin",
+    "country_code" = "adm0_a3"
+  ) %>%
+  st_transform(crs = 4326)
+```
+
+
+```{r}
+# match two dataset
+whs2019_geometry <- left_join(world_map, whs2019, by = "country_code") %>%
+  na.omit()
+```
+
+
+```{r}
+# draw the hapiness index map
+ggplot(whs2019_geometry) +
+  geom_sf(aes(fill = happiness)) +
+  scale_fill_distiller(palette = "YlOrBr") +
+  theme_void() +
+  labs(
+    title = "Rich countries have higher level of happiness",
+    subtitle = "2019",
+    caption = "World Hapiness Report 2019"
+  )
+
+```
+
+
+
+# Part III. Choosing the best model using the data of world happiness report of 2019
+
+
+```{r split the  data, message=FALSE, warning=FALSE}
+# set the seed
+set.seed(20211101)
+
+# split the data
+split <- initial_split(whs2019)
+whs19_train <- training(split)
+whs19_test <- testing(split)
+```
+
+```{r set up folds, message=FALSE, warning=FALSE}
+# set the seed
+set.seed(20211101)
+
+# set up v-fold cross-validation
+folds <- vfold_cv(data = whs19_train, v = 10)
+```
+
+```{r create a recipe }
+# create a recipe
+whs_rec <- 
+  recipe(happiness ~ ., data = whs19_train) %>%
+  # select all numeric variables and remove covid-related variables
+  step_rm(country_name, regional_indicator, country_code) %>%
+  
+  # center and scale predictors
+  step_center(all_numeric_predictors()) %>%
+  step_scale(all_numeric_predictors()) %>%
+  prep()
+  
+# see the engineered training data
+bake(prep(whs_rec, data = whs19_train), new_data = whs19_train)
+```
+
+### Model A. Random Forest
+
+```{r set up for the model, message=FALSE, warning=FALSE}
+# number of features in the dataset
+n_features <- length(setdiff(names(whs19_train), "happiness"))
+
+# create hyperparameter grid for random forest model
+rf_grid <- expand.grid(
+  mtry = floor(n_features * c(.05, .15, .25, .333, .4)),
+  min_n = c(1, 3, 5, 10)
+)
+```
+
+```{r create a Random Forest model, message=FALSE, warning=FALSE}
+# create a model
+rf_mod <- rand_forest(
+  mtry = tune(),
+  trees = n_features * 10,
+  min_n = tune()
+) %>%
+  set_engine("ranger") %>%
+  set_mode("regression")
+```
+
+```{r create the workflow for Random Forest model, message=FALSE, warning=FALSE}
+# create a workflow
+rf_wf <- workflow() %>%
+  add_recipe(whs_rec) %>%
+  add_model(rf_mod)
+```
+
+```{r fit the Random Forest model, message=FALSE, warning=FALSE}
+# fit the model
+rf_cv <- rf_wf %>%
+  tune_grid(
+    resamples = folds,
+    grid = rf_grid
+  )
+```
+
+```{r select the best parameter for Random Forest model, message=FALSE, warning=FALSE}
+# select the best model based on the "rmse" metric
+rf_best <- rf_cv %>%
+  select_best(metric = "rmse")
+```
+
+```{r update the workflow for the Random Forest model, message=FALSE, warning=FALSE}
+# use the best model to update the workflow
+rf_final <- finalize_workflow(
+  rf_wf,
+  parameters = rf_best
+)
+```
+
+```{r fit the resample using the best parameter, message=FALSE, warning=FALSE}
+# use the best parameter to fit the resamples
+rf_fit <- rf_final %>%
+  fit_resamples(
+    resamples = folds) %>%
+  collect_metrics() %>%
+  filter(.metric == "rmse")
+  
+ 
+# select the MSE for each resample
+print(rf_fit) 
+```
+
+```{r fit the entire training data for Random Forest model, message=FALSE, warning=FALSE}
+# use the best parameter of Random Forest model to fit the entire training data
+rf_fittrain <-
+  rf_wf %>%
+  finalize_workflow(parameters = rf_best) %>%
+  fit(data = whs19_train) 
+```
+
+```{r make predictions using testing data, message=FALSE, warning=FALSE}
+# make predictions with the testing data
+pred_testrf <-
+  bind_cols(
+    whs19_test,
+    predict(rf_fittrain, new_data = whs19_test)
+  )
+
+select(pred_testrf, .pred, happiness)
+```
+
+```{r calculate the RMSE, message=FALSE, warning=FALSE}
+# calculate the RMSE on the testing data
+rmse(data = pred_testrf, truth = happiness, estimate = .pred)
+```
+
+### Model B: Lasso
+
+```{r}
+# set the tunning grid for lasso model
+lasso_grid <- grid_regular(penalty(), levels = 10)
+```
+
+```{r}
+# create the lasso model
+lasso_mod <- linear_reg(
+  penalty = tune(),
+  mixture = 1
+  ) %>%
+  set_engine("glmnet")
+```
+
+
+```{r}
+# create the workflow for lasso model
+lasso_wf <- workflow() %>%
+  add_recipe(whs_rec) %>%
+  add_model(lasso_mod)
+```
+
+```{r}
+# fit the resamples
+lasso_cv <- lasso_wf %>%
+  tune_grid(
+    resample = folds,
+    grid = lasso_grid
+    )
+```
+
+```{r}
+# choose the best parameter
+lasso_best <- lasso_cv %>%
+  select_best(metric = "rmse")
+```
+
+
+```{r}
+# use the best model to update the workflow
+lasso_final <- finalize_workflow(
+  lasso_wf,
+  parameters = lasso_best
+)
+```
+
+
+```{r}
+# use the best parameter to fit the  whole training set
+lasso_final2 <- lasso_wf %>%
+  finalize_workflow(parameters = lasso_best) %>%
+  fit(data = whs19_train)
+```
+
+
+```{r}
+# using the best model to fit the whole testing dataset 
+pred_testlasso <-
+  bind_cols(
+    whs19_test,
+    predict(lasso_final2, new_data = whs19_test)
+  )
+```
+
+
+```{r}
+# calculate the rmse
+select(pred_testlasso, .pred, happiness)
+
+rmse(data = pred_testlasso, truth = happiness, estimate = .pred)
+```
+
+As Random Forest Model returns lower rmse, we choose it as our machine learning model to predict the happiness in 2020 for each country.
+
+# Part IV. Predict
+ 
+```{r implement using Random Forest model , message=FALSE, warning=FALSE}
+# make predictions for 2020 happiness score
+happi_2020 <- bind_cols(
+    whs2020,
+    predict(object = rf_fittrain, new_data = whs2020)
+  )
+
+happi_2020 <- happi_2020 %>%
+  rename("happiness" = ".pred")
+```
+
+# Part V. Cluster analysis
+
+### A. Data visualizations
+
+```{r, message=FALSE, warning=FALSE}
+# add covid policies index to our predictive dataset
+happi_2020 <- happi_2020 %>%
+  select(-country_name) %>%
+  inner_join(covid2020, by = "country_code") %>%
+  na.omit()
+```
+
+
+```{r}
+p1 <- happi_2020 %>% ggplot(aes(x = ESI, y = happiness)) +
+  geom_point() +
+  geom_smooth(method = "lm",formula = y ~ x)
+
+p2 <- happi_2020 %>% ggplot(aes(x = SI, y = happiness)) +
+  geom_point() +
+  geom_smooth(method = "lm",formula = y ~ x)
+
+p3 <- happi_2020 %>% ggplot(aes(x = GRI, y = happiness)) +
+  geom_point() +
+  geom_smooth(method = "lm",formula = y ~ x)
+
+p4 <- happi_2020 %>% ggplot(aes(x = CHI, y = happiness)) +
+  geom_point() +
+  geom_smooth(method = "lm",formula = y ~ x)
+
+p1 + p2 + p3 + p4 & theme_minimal() & labs(y = "Happiness")
+
+```
+
+
+```{r prepare for cluster analysis}
+# Select numeric value
+happi_2020_num <- data.matrix(select(happi_2020, -c(country_name, regional_indicator, country_code)))
+
+# Scale the dataset to be on the same unit
+happi_2020_scale <- as.data.frame(scale(happi_2020_num))
+
+# add more weight to the happi_2020 dataset
+happi_2020_scale <- happi_2020_scale %>%
+  mutate(
+    happiness = happiness * 3
+  )
+
+# add country_name to it
+happi_2020_scale2 <- bind_cols(
+  happi_2020_scale,
+  happi_2020$country_name) %>%
+  rename("country_name" = "...12")
+```
+
+
+```{r pick the number of clusters, message=FALSE, warning=FALSE}
+# pick the number of clusters
+set.seed(20220501)
+
+# Calculate total within sum of squares
+fviz_nbclust(happi_2020_scale, FUN = kmeans, method = "wss")
+
+# Calculate silhouette distance
+fviz_nbclust(happi_2020_scale, FUN = kmeans, method = "silhouette")
+
+# Calculate gap statistics
+fviz_nbclust(happi_2020_scale, FUN = kmeans, method = "gap_stat")
+```
+
+Given that we think we need to explore the common points behind the covid policy index of countries at different levels of happiness groups, we would like to use 3 as the number of our clusters.
+
+
+```{r}
+# Run the kmeans model
+whs2020_kmeans3 <- kmeans(happi_2020_scale, centers = 3, nstart = 100)
+
+#create new data frame to combine all relevant variables
+whs2020_clusters <- 
+  bind_cols(happi_2020_scale2,
+            cluster3 = whs2020_kmeans3$cluster)
+
+# add country_code back to the dataset
+whs2020_clusters <- left_join(whs2020_clusters, code_index, by = "country_name")
+```
+
+
+```{r}
+# add geometry to the dataset
+whs2020_geometry <- left_join(world_map, whs2020_clusters, by = "country_code") %>%
+  na.omit()
+
+# draw the map
+ggplot(data = whs2020_geometry) +
+  geom_sf(aes(fill = factor(cluster3))) +
+  scale_fill_brewer(palette = "Set4") +
+  theme_void() +
+  labs(
+    fill = "cluster",
+    title = "Rich countries have higher level of happiness",
+    subtitle = "2020"
+  )
+  
+```
+
+
+```{r}
+fviz_cluster(whs2020_kmeans3, 
+               data = happi_2020_scale,
+               repel = TRUE,
+               alpha = 0.5) +
+    labs(title = sprintf("K-Means with K = 3 and PCA"),
+         ) +
+    theme_minimal() 
+```
+
+
+```{r}
+# map the clusters by happiness
+ggplot(data = whs2020_clusters, 
+       mapping = aes(x = cluster3,
+                     y = happiness,
+                     fill = factor(cluster3))) +
+  geom_boxplot(width = 0.5,
+               alpha = 0.4) +
+  scale_fill_manual(name = "Cluster",
+                    values = c("1" = "#FF4040",
+                               "2" = "#00FFFF",
+                               "3" = "#76EE00")) +
+  theme(panel.background = element_blank(),
+         axis.line.x = element_line(linetype = 1),
+         axis.line.y = element_line(linetype = 1)) +
+   labs(title = "Happiness on Clusters",
+        y = "Happiness",
+        x = NULL)
+```
+
+
+
+
+
+
+
+
+```{r construct a function to get the mean within each cluster groups}
+# create a function to get the mean within each cluster groups
+cluster_analysis_mean <- function(df, k) {
+  # Run the kmeans model
+  happi_2020_km <- kmeans(df, k, nstart = 100)
+  
+  # Return the dataframe with cluster groups and their mean of each columns within group
+  happi_2020kmcluster <- df %>%
+    group_by(happi_2020_km$cluster) %>%
+    summarise_all(mean)
+  
+  return(happi_2020kmcluster)
+}
+```
+
+
+```{r apply the above function}
+happi_2020_k2 <- cluster_analysis_mean(happi_2020_scale, 3) %>%
+  rename("cluster" = "happi_2020_km$cluster")
+```
+
+
+```{r construct a function to compare the mean of covid-related index within each cluster group}
+# construct a function that draw the graph to compare the covid response index
+cluster_mean_graph <- function(df, var) {
+  df %>% 
+    ggplot() +
+    geom_bar(aes(x = reorder(factor(cluster), var),
+                 y = var,
+                 fill = factor(cluster)),
+             stat = "identity",
+             legend = FALSE) +
+    scale_fill_brewer(palette = "Set2") +
+    theme_minimal() +
+    labs(x = "",
+         fill = "Cluster")
+}
+```
+
+
+```{r}
+# draw the graph to compare the covid response index
+
+p1 <- cluster_mean_graph(happi_2020_k2, happi_2020_k2$SI) + labs(y = "Stringency Index")
+
+p2 <- cluster_mean_graph(happi_2020_k2, happi_2020_k2$GRI)+ labs(y = "Government Response Index")
+
+p3 <- cluster_mean_graph(happi_2020_k2, happi_2020_k2$CHI)+ labs(y = "Containment and Health Index")
+
+p4 <- cluster_mean_graph(happi_2020_k2, happi_2020_k2$ESI)+ labs(y = "Economic Support Index")
+
+
+p1 + p2 + p3 + p4 + plot_layout(guides = "collect") & ylim(c(-1.0,1))
+
+```
+
+
+
