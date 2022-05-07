@@ -22,6 +22,15 @@ library(factoextra)
 library(corrplot)
 ```
 
+#Data Sources
+
+For this analysis, we combine two data sources. The first one is The World Happiness Report 2019 and 2020, a landmark survey of the state of global happiness that ranks worldwide countries by how happy their citizens perceive themselves to be. Among the variables, the happiness score is a national average of the responses to the main life evaluation question asked in the Gallup World Poll (GWP), which uses the Cantril Ladder. Happiness score can be explained by the other six factors, namely  GDP per capita, Healthy Life Expectancy, Social support, Freedom to make life choices, Generosity, and Corruption Perception, which are also included in the dataset.
+
+The second source is the database of variation in government responses to COVID-19 from 2020 to now collected by the Oxford COVID-19 Government Response Tracker (OXCGRT), providing a systematic cross-national, cross-temporal measure to understand how government responses have evolved over the full period of the disease’s spread. It also offered the composition and calculation of several policy indices, among which we took advantage of 4 indices, namely government response index, containment and health index, stringency index and economic support index.
+
+Github Repo: final_project
+
+
 # Part I. Data cleaning
 
 ```{r}
@@ -129,6 +138,8 @@ cor_whs <- cor(whs2019cor)
 corrplot(cor_whs, method = "color") + 
   theme_void()
 ```
+The heatmap represents the correlation between seven variables. They are happiness, logged gdp per capita, social support, healthy life expectancy, freedom to make life choices, generosity and perceptions of corruption respectively. Dark blue is the sign of strong positive correlation and dark red means strong negative correlation.  Happiness, logged gdp per capita, social support and healthy life expectancy have rather strong correlations with each other, for their covariances are all higher than 0.4. Perceptions of corruption are negatively correlated with other six variables and the covariances are located between -0.2 and -0.4.
+
 
 ### B.
  
@@ -170,5 +181,5 @@ ggplot(whs2019_geometry) +
   )
 
 ```
-
+We only used World Happiness Report 2019 from the first dataset to draw a world map with the degree of happiness in 2019. In the map, dark orange stands for lower level of happiness, and vice versa. It is clear that North America, Western Europe and Australia where wealthy countries concentrate are endowed with much higher levels of happiness than those parts of the world with middle-income and low-income countries.
 
