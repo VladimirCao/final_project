@@ -1,5 +1,5 @@
-# Final Project:  Covid Response Policy among Countries with Different Happiness levels 
-# Sheng Cao & Xiaolin Zheng & Tianjiao Gao & Xiangting Ye
+\title Covid Response Policy among Countries with Different Happiness levels 
+\author Sheng Cao & Xiaolin Zheng & Tianjiao Gao & Xiangting Ye
 
 Biref Overview: 
 This project evaluate how different degree of covid government responses may affect local happiness levels. We use data from Oxford COVID-19 Government 
