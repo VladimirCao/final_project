@@ -1,3 +1,7 @@
+---
+permalink: /index.html
+---
+
 # Covid Response Policy among Countries with Different Happiness Levels
 
 ### AUTHOR
