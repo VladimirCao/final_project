@@ -1,7 +1,7 @@
 ---
-title: "project_19_fit20"
+title: "Covid Response Policy among Countries with Different Happiness Levels"
 author: "Xiaolin Zheng, Sheng Cao, Xiangting Ye, Tianjiao Gao"
-date: "4/30/2022"
+date: "5/13/2022"
 output: html_document
 ---
 
@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-````{r}
+```{r load the package, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(lubridate)
 library(sf)
@@ -20,18 +20,20 @@ library(patchwork)
 library(tidymodels)
 library(factoextra)
 library(corrplot)
+library(ggthemes)
+library(plotly)
 ```
 
-# Part I. Data cleaning
+# Part I. Data Cleaning
 
-```{r}
-# load the data
+```{r load the data, message=FALSE, warning=FALSE}
+# Load the data
 whs2019 <- read_csv("2019.csv")
 whs2020 <- read_csv("2020.csv")
 covid2020 <- read_csv("OxCGRT_withnotes_2020.csv")
 ```
 
-```{r}
+```{r data cleaning for whs2019 dataset, message=FALSE, warning=FALSE}
 # Data cleaning for whs2019 dataset
   
   # Clean the variable names
@@ -46,11 +48,9 @@ covid2020 <- read_csv("OxCGRT_withnotes_2020.csv")
   # Delete the missing values
   whs2019 <- whs2019 %>%
     na.omit()
-
-#write.csv(whs2019, file = "whs2019_update.csv")
 ```
 
-```{r}
+```{r data cleaning for whs2020 dataset, message=FALSE, warning=FALSE}
 # Data cleaning for whs2020 dataset
   
   # Clean the variable names
@@ -64,10 +64,9 @@ covid2020 <- read_csv("OxCGRT_withnotes_2020.csv")
   # Delete the missing values
   whs2020 <- whs2020 %>%
     na.omit()
-  
 ```
 
-```{r}
+```{r data cleaning for covid2020 dataset, message=FALSE, warning=FALSE}
 # Data cleaning for covid2020 dataset
 
   # clean the data variable name
@@ -95,50 +94,70 @@ covid2020 <- read_csv("OxCGRT_withnotes_2020.csv")
     )
 ```
 
-```{r}
+```{r create the country code index}
 # create the country code index
 code_index <- covid2020 %>%
   select(country_name, country_code)
 ```
 
-
-```{r}
+```{r join country code index to whs2019}
 # add country code column to whs2019 so that we can match whs2019 to the geometry dataset using the country code
 whs2019 <- whs2019 %>%
   left_join(code_index, by = "country_name")
 ```
 
-```{r}
-# add country code column to whs2019 so that we can match whs2019 to the geometry dataset using the country code
+```{r join country code index to whs2020}
+# add country code column to whs2020 so that we can match whs2019 to the geometry dataset using the country code
 whs2020 <- whs2020 %>%
   left_join(code_index, by = "country_name")
 ```
 
-# Part II. Data Visualzation  
+```{r sum the number of countries in each dataset}
+# sum the number of countries left in each dataset after data cleaning
+nrow(whs2019)
+nrow(whs2020)
+nrow(covid2020)
+```
 
-### A.
+After deleting missing values and selecting variables of interest, we are left with 153 countries in World Happiness Report 2019, 136 countries in World Happiness Report 2020 and 187 countries in Oxford COVID-19 Government Response Tracker 2020.
 
-```{r}
+# Part II. Exploratory Data Analysis
+
+### A. Correlation Matrix of Happiness Factors in 2019
+
+```{r prepare for correlation matrix}
 whs2019cor <- whs2019 %>%
-  select_if(is.numeric)
+  # select numeric columns
+  select_if(is.numeric) %>%
+  # select six happiness factors
+  select(-c("happiness"))
 ```
 
-```{r}
-# computing correlation matrix
-cor_whs <- cor(whs2019cor)
-corrplot(cor_whs, method = "color") + 
-  theme_void()
+```{r draw the correlation matrix plot}
+# form the correlation matrix table of happiness factors
+cor_whs <- cor(whs2019cor) 
+
+# rename column and row names
+colnames(cor_whs) <- c("GDP per capita", "Social Support", "Healthy Life Expectancy", "Freedom to Make Life Choices", "Generosity", "Perceptions of Corruption")
+rownames(cor_whs) <- c("GDP per capita", "Social Support", "Healthy Life Expectancy", "Freedom to Make Life Choices", "Generosity", "Perceptions of Corruption")
+
+# draw the correlation matrix plot
+corrplot(cor_whs,
+         tl.col = c("black"),
+         title = "Correlation Matrix of Happiness Factors in 2019",
+          mar=c(0,0,2,0))
 ```
 
-### B.
+The correlation matrix displays the correlation between six happiness factors, of which the color intensity is proportional to the coefficients. As shown above, except for generosity, all other five factors show strong correlation. There are strong positive correlation between GDP, social support, healthy life expectancy and freedom to make life choices and negative correlation between perceptions of corruption and other variables.
+
+### B. 2019 Happiness Scores in World Map
  
-```{r}
+```{r load the world map data}
 # load the world map data
 world <- ne_countries(scale = "medium", returnclass = "sf")
 ```
 
-
-```{r}
+```{r clean the world map dataest}
 # clean the world map dataset
 world_map <- world %>%
   select(admin, adm0_a3, geometry) %>%
@@ -149,32 +168,34 @@ world_map <- world %>%
   st_transform(crs = 4326)
 ```
 
-
-```{r}
-# match two dataset
+```{r match two datasets}
+# match two datasets
 whs2019_geometry <- left_join(world_map, whs2019, by = "country_code") %>%
   na.omit()
 ```
 
-
-```{r}
-# draw the hapiness index map
-ggplot(whs2019_geometry) +
+```{r draw happiness scores map}
+# draw the happiness socres map
+P1 <- ggplot(whs2019_geometry) +
   geom_sf(aes(fill = happiness)) +
   scale_fill_distiller(palette = "YlOrBr") +
   theme_void() +
   labs(
-    title = "Rich countries have higher level of happiness",
-    subtitle = "2019",
-    caption = "World Hapiness Report 2019"
-  )
+    title = "Developed Countries Represent Higher Levels of Happiness",
+    subtitle = "World Happiness Score by Country in 2019",
+    caption = "SOURCE: World Happiness Report 2019 ",
+    fill = "Happiness Score"
+  ) 
 
+P1
 ```
 
+Developed Countries Represent Higher Levels of Happiness:
+In the map, dark orange stands for lower level of happiness, and vice versa. We can see that in 2019, people in North America, Western Europe, Australia and New Zealand report higher happiness scores, corresponding to most developed countries in the world. In contrast, low-income countries like Southern Asia and Africa represent the lowest happiness scores worldwide, corresponding to a darker color.
 
+# Part III. Predict Happiness Score in 2020 Using Machine Learning Models
 
-# Part III. Choosing the best model using the data of world happiness report of 2019
-
+We plan to construct two machine learning models with data in 2019, and choose the model with smaller RMSE as the best model to predict the world happiness score in 2020. We first split the data and set up 10 folds for cross validation to avoid the problem of oversampling. Then we create a receipt using all the six factors as predictors, and center and scale them as part of the feature engineering process.
 
 ```{r split the  data, message=FALSE, warning=FALSE}
 # set the seed
@@ -210,7 +231,7 @@ whs_rec <-
 bake(prep(whs_rec, data = whs19_train), new_data = whs19_train)
 ```
 
-### Model A. Random Forest
+### Model A. Random Forest Model
 
 ```{r set up for the model, message=FALSE, warning=FALSE}
 # number of features in the dataset
@@ -264,19 +285,6 @@ rf_final <- finalize_workflow(
 )
 ```
 
-```{r fit the resample using the best parameter, message=FALSE, warning=FALSE}
-# use the best parameter to fit the resamples
-rf_fit <- rf_final %>%
-  fit_resamples(
-    resamples = folds) %>%
-  collect_metrics() %>%
-  filter(.metric == "rmse")
-  
- 
-# select the MSE for each resample
-print(rf_fit) 
-```
-
 ```{r fit the entire training data for Random Forest model, message=FALSE, warning=FALSE}
 # use the best parameter of Random Forest model to fit the entire training data
 rf_fittrain <-
@@ -292,8 +300,6 @@ pred_testrf <-
     whs19_test,
     predict(rf_fittrain, new_data = whs19_test)
   )
-
-select(pred_testrf, .pred, happiness)
 ```
 
 ```{r calculate the RMSE, message=FALSE, warning=FALSE}
@@ -301,15 +307,15 @@ select(pred_testrf, .pred, happiness)
 rmse(data = pred_testrf, truth = happiness, estimate = .pred)
 ```
 
-### Model B: Lasso
+### Model B: Lasso Model
 
-```{r}
-# set the tunning grid for lasso model
+```{r set the tuning grid}
+# set the tuning grid for lasso model
 lasso_grid <- grid_regular(penalty(), levels = 10)
 ```
 
-```{r}
-# create the lasso model
+```{r create a Lasso model }
+# create a lasso model
 lasso_mod <- linear_reg(
   penalty = tune(),
   mixture = 1
@@ -317,16 +323,15 @@ lasso_mod <- linear_reg(
   set_engine("glmnet")
 ```
 
-
-```{r}
+```{r create the workflow for Lasso model}
 # create the workflow for lasso model
 lasso_wf <- workflow() %>%
   add_recipe(whs_rec) %>%
   add_model(lasso_mod)
 ```
 
-```{r}
-# fit the resamples
+```{r fit the Lasso model, message=FALSE, warning=FALSE}
+# fit the model
 lasso_cv <- lasso_wf %>%
   tune_grid(
     resample = folds,
@@ -334,14 +339,13 @@ lasso_cv <- lasso_wf %>%
     )
 ```
 
-```{r}
-# choose the best parameter
+```{r select the best parameter for Lasso model}
+# select the best model based on the "rmse" metric
 lasso_best <- lasso_cv %>%
   select_best(metric = "rmse")
 ```
 
-
-```{r}
+```{r update the workflow for the Lasso model}
 # use the best model to update the workflow
 lasso_final <- finalize_workflow(
   lasso_wf,
@@ -349,36 +353,31 @@ lasso_final <- finalize_workflow(
 )
 ```
 
-
-```{r}
-# use the best parameter to fit the  whole training set
-lasso_final2 <- lasso_wf %>%
+```{r fit the entire training data for Lasso model}
+# use the best parameter of Lasso model to fit the entire training data
+lasso_fittrain <- lasso_wf %>%
   finalize_workflow(parameters = lasso_best) %>%
   fit(data = whs19_train)
 ```
 
-
-```{r}
-# using the best model to fit the whole testing dataset 
+```{r make predictions using the testing data}
+# make predictions with the testing data
 pred_testlasso <-
   bind_cols(
     whs19_test,
-    predict(lasso_final2, new_data = whs19_test)
+    predict(lasso_fittrain, new_data = whs19_test)
   )
 ```
 
-
-```{r}
-# calculate the rmse
-select(pred_testlasso, .pred, happiness)
-
+```{r calculate RMSE}
+# calculate the RMSE on the testing data
 rmse(data = pred_testlasso, truth = happiness, estimate = .pred)
 ```
 
-As Random Forest Model returns lower rmse, we choose it as our machine learning model to predict the happiness in 2020 for each country.
+### Make Predictions for 2020 happiness score
 
-# Part IV. Predict
- 
+As the Random Forest Model returns a lower RMSE, we choose it as our best model to predict the happiness score in 2020.
+
 ```{r implement using Random Forest model , message=FALSE, warning=FALSE}
 # make predictions for 2020 happiness score
 happi_2020 <- bind_cols(
@@ -386,65 +385,82 @@ happi_2020 <- bind_cols(
     predict(object = rf_fittrain, new_data = whs2020)
   )
 
+# rename the prediction column
 happi_2020 <- happi_2020 %>%
   rename("happiness" = ".pred")
-```
 
-# Part V. Cluster analysis
+# show the prediction results
+select(happi_2020, country_name, happiness)
 
-### A. Data visualizations
-
-```{r, message=FALSE, warning=FALSE}
-# add covid policies index to our predictive dataset
+# add covid policies index to 2020 predicted dataset
 happi_2020 <- happi_2020 %>%
   select(-country_name) %>%
   inner_join(covid2020, by = "country_code") %>%
   na.omit()
+
 ```
 
+# Part IV. Cluster analysis and Comparision of Mean Covid Policy Index by Cluster
 
-```{r}
+### A.Pre-analysis: OLS regression 
+
+Before doing cluster analysis, we use OLS regression to see the relationship between covid response policy index and predicted happiness scores in 2020. According to the graphs, we can see that with the exception of stringency index, other three indices
+are associated with happiness scores. Thus, we infer that after we cluster happiness factors, covid response policy index and weighted happiness scores, index of economic support, government response and containment health would show difference between each cluster.
+
+```{r run OLS regression}
+# regress economic support index on happiness scores
 p1 <- happi_2020 %>% ggplot(aes(x = ESI, y = happiness)) +
   geom_point() +
-  geom_smooth(method = "lm",formula = y ~ x)
+  geom_smooth(method = "lm",formula = y ~ x) + 
+  labs(x = "Economic Support Index")
 
+# regress stringency index on happiness scores
 p2 <- happi_2020 %>% ggplot(aes(x = SI, y = happiness)) +
   geom_point() +
-  geom_smooth(method = "lm",formula = y ~ x)
+  geom_smooth(method = "lm",formula = y ~ x) + 
+  labs(x = "Stringency Index")
 
+# regress government response index on happiness scores
 p3 <- happi_2020 %>% ggplot(aes(x = GRI, y = happiness)) +
   geom_point() +
-  geom_smooth(method = "lm",formula = y ~ x)
-
+  geom_smooth(method = "lm",formula = y ~ x) +
+  labs(x = "Government Response Index")
+ 
+# regression containment health index on happiness scores 
 p4 <- happi_2020 %>% ggplot(aes(x = CHI, y = happiness)) +
   geom_point() +
-  geom_smooth(method = "lm",formula = y ~ x)
+  geom_smooth(method = "lm",formula = y ~ x) +
+  labs(x = "Containment Health Index")
 
 p1 + p2 + p3 + p4 & theme_minimal() & labs(y = "Happiness")
-
 ```
 
+### B.Cluster Analysis
 
-```{r prepare for cluster analysis}
+After we scaling the data to ensure all variables are on the same unit, we put more weight on happiness so that the clustered groups are able to reflect different levels of happiness. The next step is to conduct a cluster analysis, finding which countries are in each group accordingly with a world map and an interactive cluster plot.
+
+```{r prepare for cluster analysis, message=FALSE, warning=FALSE}
 # Select numeric value
-happi_2020_num <- data.matrix(select(happi_2020, -c(country_name, regional_indicator, country_code)))
+happi_2020_num <- happi_2020 %>%
+  select(-c(country_name, 
+            regional_indicator, 
+            country_code))
 
 # Scale the dataset to be on the same unit
 happi_2020_scale <- as.data.frame(scale(happi_2020_num))
 
-# add more weight to the happi_2020 dataset
+# add more weight to the happiness score
 happi_2020_scale <- happi_2020_scale %>%
   mutate(
     happiness = happiness * 3
   )
 
-# add country_name to it
+# Create a scaled dataframe with country_name
 happi_2020_scale2 <- bind_cols(
   happi_2020_scale,
   happi_2020$country_name) %>%
   rename("country_name" = "...12")
 ```
-
 
 ```{r pick the number of clusters, message=FALSE, warning=FALSE}
 # pick the number of clusters
@@ -460,111 +476,115 @@ fviz_nbclust(happi_2020_scale, FUN = kmeans, method = "silhouette")
 fviz_nbclust(happi_2020_scale, FUN = kmeans, method = "gap_stat")
 ```
 
-Given that we think we need to explore the common points behind the covid policy index of countries at different levels of happiness groups, we would like to use 3 as the number of our clusters.
+The suggested number of clusters is 2 and 7. However, for the purpose of better interpretation and visualization, we choose k = 3 as the number of clusters.
 
-
-```{r}
-# Run the kmeans model
+```{r run kmeans model}
+set.seed(12305812)
+# run the kmeans model
 whs2020_kmeans3 <- kmeans(happi_2020_scale, centers = 3, nstart = 100)
 
-#create new data frame to combine all relevant variables
+# combine the cluster column to th happi_2020_scale2
 whs2020_clusters <- 
   bind_cols(happi_2020_scale2,
             cluster3 = whs2020_kmeans3$cluster)
-
-# add country_code back to the dataset
-whs2020_clusters <- left_join(whs2020_clusters, code_index, by = "country_name")
 ```
 
+```{r run PCA}
+# run PCA
+set.seed(1019278012)
+happi_2020_pca <- happi_2020_scale %>%
+  prcomp()
 
-```{r}
+# extract the principal components
+happi_pca_pc1pc2 <- as_tibble(happi_2020_pca$x) %>%
+  select(PC1, PC2)
+
+# combine the first two PCs to whs2020_clusters
+happi2020_cluster_pca <-  bind_cols(
+  whs2020_clusters,
+  happi_pca_pc1pc2
+)
+summary(happi_2020_pca)
+```
+
+The first principal component explains  0.65 of the variance. The second principal component explains 0.15 of the variance.
+
+```{r find the names of most central countries in each cluster}
+# find the names of most central countries in each cluster
+central_happi_names <- happi2020_cluster_pca %>%
+  group_by(cluster3) %>%
+  mutate(dist = sqrt((PC1 - mean(PC1)) ^ 2 + (PC2 - mean(PC2)) ^ 2)) %>%
+  slice_min(dist) %>%
+  ungroup()
+
+select(central_happi_names, country_name, cluster3, happiness)
+```
+
+To get a preliminary understanding the characteristics of each cluster, we find the names of most central countries in each cluster. In the first cluster, Germany is the most central country, corresponding to a happiness score of 4.44. In the second cluster, South Korea is the most central country, of which its happiness score is 0.45. In the third cluster, Senegal is the most central country and its happiness score is -3.27. So this provides us with evidence that the first to the third cluster group represent the highest to the least happiness scores accordingly.
+
+```{r Create a plot of the clusters with PC1 and PC2 as the x and y axis}
+Pcluster <- ggplot() +
+  geom_point(
+    data = happi2020_cluster_pca,
+    mapping = aes(PC1, PC2,colour = factor(cluster3), text = country_name),
+    alpha = 0.8,
+  ) +
+  labs(
+    title = "K-Means with K = 3 and PCA",
+    colour = "Cluster",
+    x = "PC1 (0.65 of Variation)",
+    y = "PC2 (0.15 of Variation)"
+  ) + 
+  theme_minimal() + 
+  guides(text = NULL)
+
+ggplotly(Pcluster, tooltip = "text")
+```
+
+```{r map the cluster group,warning=FALSE}
+# add country_code back to the dataset 
+whs2020_clusters <- left_join(whs2020_clusters, code_index, by = "country_name")
+
 # add geometry to the dataset
 whs2020_geometry <- left_join(world_map, whs2020_clusters, by = "country_code") %>%
   na.omit()
 
-# draw the map
-ggplot(data = whs2020_geometry) +
+# map the cluster group
+C1<- ggplot(data = whs2020_geometry) +
   geom_sf(aes(fill = factor(cluster3))) +
   scale_fill_brewer(palette = "Set4") +
   theme_void() +
   labs(
-    fill = "cluster",
-    title = "Rich countries have higher level of happiness",
-    subtitle = "2020"
+    fill = "Cluster",
+    title = "Each Cluster is Representative of Happiness Levels",
+    subtitle = "Geographical Distribution of Each Cluster",
+    caption = "SOURCE: World Happiness Report 2020"
   )
-  
 ```
-The light green indicates the cluster of countries with higher levels of happiness, mainly composed of Western European countries, North America and Australia, which are rich countries. The medium green is on behalf of the cluster of nations with lowest levels of happiness, like Africa  where many poverty-stricken countries are located. Besides, the dark green represents those countries with medium degree of happiness, consisting of the middle-income countries, South America, East, Southeastern as well as Northern Asia and East Europe.
-
 
 ```{r}
-fviz_cluster(whs2020_kmeans3, 
-               data = happi_2020_scale,
-               repel = TRUE,
-               alpha = 0.5) +
-    labs(title = sprintf("K-Means with K = 3 and PCA"),
-         ) +
-    theme_minimal() 
+C1 + P1+plot_layout(ncol=1)
 ```
 
+Comparing the geographic distribution of each cluster group and happiness levels, we find significant similarities. The first group, mainly distributed in North America, Western Europe, Australia and New Zealand, corresponds to countries with the highest happiness levels whereas The third group, mainly in Africa and Southern Asia, represents the least happiness levels. The second group corresponds to countries with medium happiness level.
 
-```{r}
-# map the clusters by happiness
-ggplot(data = whs2020_clusters, 
-       mapping = aes(x = cluster3,
-                     y = happiness,
-                     fill = factor(cluster3))) +
-  geom_boxplot(width = 0.5,
-               alpha = 0.4) +
-  scale_fill_manual(name = "Cluster",
-                    values = c("1" = "#FF4040",
-                               "2" = "#00FFFF",
-                               "3" = "#76EE00")) +
-  theme(panel.background = element_blank(),
-         axis.line.x = element_line(linetype = 1),
-         axis.line.y = element_line(linetype = 1)) +
-   labs(title = "Happiness on Clusters",
-        y = "Happiness",
-        x = NULL)
+### C.Compare Mean Covid Response Policy Index by Cluster Group
+
+```{r get the mean of covid response policy index}
+# get the mean of covid response policy index
+happi2020_cluster_pca_m<- happi2020_cluster_pca %>%
+  group_by(cluster3) %>%
+  summarise_at(.vars = c("ESI", "SI", "GRI", "CHI"), .funs = mean)
 ```
-
-
-
-
-
-
-
-
-```{r construct a function to get the mean within each cluster groups}
-# create a function to get the mean within each cluster groups
-cluster_analysis_mean <- function(df, k) {
-  # Run the kmeans model
-  happi_2020_km <- kmeans(df, k, nstart = 100)
-  
-  # Return the dataframe with cluster groups and their mean of each columns within group
-  happi_2020kmcluster <- df %>%
-    group_by(happi_2020_km$cluster) %>%
-    summarise_all(mean)
-  
-  return(happi_2020kmcluster)
-}
-```
-
-
-```{r apply the above function}
-happi_2020_k2 <- cluster_analysis_mean(happi_2020_scale, 3) %>%
-  rename("cluster" = "happi_2020_km$cluster")
-```
-
 
 ```{r construct a function to compare the mean of covid-related index within each cluster group}
 # construct a function that draw the graph to compare the covid response index
 cluster_mean_graph <- function(df, var) {
   df %>% 
     ggplot() +
-    geom_bar(aes(x = reorder(factor(cluster), var),
+    geom_bar(aes(x = factor(cluster3),
                  y = var,
-                 fill = factor(cluster)),
+                 fill = factor(cluster3)),
              stat = "identity",
              legend = FALSE) +
     scale_fill_brewer(palette = "Set2") +
@@ -574,36 +594,39 @@ cluster_mean_graph <- function(df, var) {
 }
 ```
 
-
-```{r}
+```{r message=FALSE, warning=FALSE}
 # draw the graph to compare the covid response index
-
-p1 <- cluster_mean_graph(happi_2020_k2, happi_2020_k2$SI) + labs(y = "Stringency Index")
+cluster_mean_graph(happi2020_cluster_pca_m, happi2020_cluster_pca_m$SI) + labs(y = "Stringency Index")
 ```
-Cluster 1 and 3 have negative mean index, imply that those countries are less likely to implement rigorous closure policy. While cluster 2 countries are prone to enforce stern closure policy. 
-Stringency index’s difference between group is relatively indistinctive. This finding may be explained by two different reasons. The first explanation is that covid closure policy would not heavily affect people’s happiness. While given the fact that there are many researches in psychology have demonstrated that isolation from ordinary social life can produce significant negative impact on people’s mental health, this argument may be questionable. Another explanation is that closure policy would significantly affect people’s happiness, but its effects can be partly offset by economic support and health investment provided by governments. Considering the evidence in the fields of sociology and psychology, the second explanation may be more reasonable. 
 
-```{r}
-p2 <- cluster_mean_graph(happi_2020_k2, happi_2020_k2$GRI)+ labs(y = "Government Response Index")
+Cluster 1 and 3 have negative mean stringency index, imply that those countries are less likely to implement rigorous closure policy. While cluster 2 countries are prone to enforce stern closure policy. 
+Stringency index’s difference between group is relatively indistinctive. 
+This finding may be explained by two different reasons. The first explanation is that covid closure policy would not heavily affect people’s happiness. While given the fact that there are many researches in psychology have demonstrated that isolation from ordinary social life can produce significant negative impact on people’s mental health, this argument may be questionable. Another explanation is that closure policy would significantly affect people’s happiness, but its effects can be partly offset by economic support and health investment provided by governments. Considering the evidence in the fields of sociology and psychology, the second explanation may be more reasonable. 
+
+```{r message=FALSE, warning=FALSE}
+cluster_mean_graph(happi2020_cluster_pca_m, happi2020_cluster_pca_m$GRI) + labs(y = "Government Response Index")
 ```
-Cluster 1 enjoys negative government response index, while cluster 2 and 3 countries' governments are more responsive compared with cluster 1 countries.
+
+Cluster 3 enjoys negative government response index, while cluster 1 and 2 countries' governments are more responsive compared with cluster 3 countries.
 Government response index’s difference between groups is relatively insignificant. Considering that this index is the aggregation of other 3 indexes, the between group variation of economic support index and containment and health index may be partly offset by stringency index. The total effect of covid relevant policies appears to have moderate impact on people’s happiness index. 
 
-```{r}
-p3 <- cluster_mean_graph(happi_2020_k2, happi_2020_k2$CHI)+ labs(y = "Containment and Health Index")
+```{r message=FALSE, warning=FALSE}
+cluster_mean_graph(happi2020_cluster_pca_m, happi2020_cluster_pca_m$CHI)+ labs(y = "Conkktainment and Health Index")
 ```
-Cluster 1 have negative containment and health index while cluster 3 countries' mean index is also nearly 0. Compared with cluster 2 countries, they are less prone to provide additional health investment.
+
+Cluster 3 have negative containment and health index while cluster 1 countries' mean index is also nearly 0. Compared with cluster 2 countries, they are less prone to provide additional health investment.
+
+```{r message=FALSE, warning=FALSE}
+cluster_mean_graph(happi2020_cluster_pca_m, happi2020_cluster_pca_m$ESI) + labs(y = "Economic Support Index")
+```
+
+Cluster 3 countries' economic support on citizens are relatively weak, while countries for cluster 1 and 2 more prone to provide economic support for citizens, especially for countries in cluster 1.
+
+Plot 3 and 4 indicate that economic support index and containment and health index have larger difference between group based on happiness index compared with stringency index and government response index. This phenomenon may be explained by the relationship between countries’ economic condition and citizens’ happiness. Developed countries usually enjoy higher happiness index, and also have the ability to provide greater economic support and health investment. As countries are divided mainly based on happiness score, it is reasonable to discover that these two indexes are significantly vary between groups. 
 
 
-```{r}
-p4 <- cluster_mean_graph(happi_2020_k2, happi_2020_k2$ESI)+ labs(y = "Economic Support Index")
-```
-Cluster 1 countries' economic support on citizens are relatively weak, while countries for cluster 2 and 3 more prone to provide economic support for citizens, especially for countries in cluster 3.
-plot 3 and 4 indicate that economic support index and containment and health index have larger difference between group based on happiness index compared with stringency index and government response index. This phenomenon may be explained by the relationship between countries’ economic condition and citizens’ happiness. Developed countries usually enjoy higher happiness index, and also have the ability to provide greater economic support and health investment. As countries are divided mainly based on happiness score, it is reasonable to discover that these two indexes are significantly vary between groups. 
 
-```{r}
-p1 + p2 + p3 + p4 + plot_layout(guides = "collect") & ylim(c(-1.0,1))
-```
-#Improvements
-First, all the four indices related to COVID-19 are simple averages of the individual component indicators,which might arouse the problem that the significance of some indicators can not be represented through the calculation. Therefore, some indicators might need to be weighted.
-Second, indicators here are ordinary, so that they fail to reflect their true intensity. For example, income support is also relative to the amount of support.
+
+
+
+
