@@ -13,4 +13,4 @@ Response Tracker (OXCGRT)](https://www.bsg.ox.ac.uk/research/research-projects/c
 
 1. Economic support index and containment and health index have larger differences between groups based on happiness index compared with stringency index and government response index. 
 3. Etringency index’s difference between groups is relatively indistinctive. 
-4. Ehe government response index’s difference between groups is relatively insignificant. 
+4. The government response index’s difference between groups is relatively insignificant. 
