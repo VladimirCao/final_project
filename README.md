@@ -10,8 +10,6 @@ After deleting missing values and selecting variables of interest, we are left w
 
 **Full Github Repository:** [PPOL670 Intro to Data Science Final Project](https://github.com/VladimirCao/final_project)
 
-The full analysis can also be [read alongside the code that produced the figures.](https://github.com/VladimirCao/final_project/final-project.html)
-
 
 ## Part I. Exploratory Data Analysis
 
