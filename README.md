@@ -9,7 +9,7 @@ Response Tracker (OXCGRT)](https://www.bsg.ox.ac.uk/research/research-projects/c
 Sheng Cao & Xiaolin Zheng & Tianjiao Gao & Xiangting Ye
 
 
-## PROJECT KEY FINDINGS
+## KEY FINDINGS
 
 1. Economic support index and containment and health index have larger differences between groups based on happiness index compared with stringency index and government response index. 
 3. Stringency index’s difference between groups is relatively indistinctive. 
