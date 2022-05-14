@@ -8,9 +8,9 @@ The second source is the database of variation in government responses to COVID-
 
 After deleting missing values and selecting variables of interest, we are left with 153 countries in World Happiness Report 2019, 136 countries in World Happiness Report 2020 and 187 countries in Oxford COVID-19 Government Response Tracker 2020.
 
-**Full Github Repository:** [PPOL670 Intro to Data Science Final Project](https://vladimircao.github.io/final_project/)
+**Full Github Repository:** [PPOL670 Intro to Data Science Final Project](https://github.com/VladimirCao/final_project)
 
-The full analysis can also be [read alongside the code that produced the figures.](/final-project.html)
+The full analysis can also be [read alongside the code that produced the figures.](https://github.com/VladimirCao/final_project/final-project.html)
 
 
 ## Part I. Exploratory Data Analysis
