@@ -1,4 +1,3 @@
-# Covid Response Policy among Countries with Different Happiness Levels
 
 ### Data
 
