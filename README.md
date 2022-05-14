@@ -1,3 +1,5 @@
+# Covid Response Policy among Countries with Different Happiness Levels
+
 ### Data
 
 For this analysis, we combine two data sources. The first one is [World Happiness Report 2019 and 2020](https://worldhappiness.report/), a landmark survey of the state of global happiness that ranks worldwide countries by how happy their citizens perceive themselves to be. Among the variables, the happiness score is a national average of the responses to the main life evaluation question asked in the Gallup World Poll (GWP), which uses the Cantril Ladder. Happiness score can be explained by the other six factors, namely  GDP per capita, Healthy Life Expectancy, Social support, Freedom to make life choices, Generosity, and Corruption Perception, which are also included in the dataset.
