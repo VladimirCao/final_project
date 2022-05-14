@@ -72,5 +72,9 @@ These facts indicate that economic support index and containment and health inde
 ![figure09](Figure_9.png)
 
 
+## Reference
 
+Brulé, G., Veenhoven, R. Freedom and happiness in nations: why the Finns are happier than the French. Psych Well-Being 4, 17 (2014). https://doi.org/10.1186/s13612-014-0017-4
+
+Hongxu Lu,Jinyun Duan,Ting Wu,Bei Zhou,Changyuan Xu(2022), ‘The influence of fear of isolation on contact experience disclosure: Evidence from safety management of the COVID-19 pandemic’, Asian Journal of Social Psychology, pp.1-12 https://doi.org/10.1111/ajsp.12527
 
