@@ -1,2 +1,4 @@
-theme: jekyll-theme-cayman 
-title: Covid Response Policy among Countries with Different Happiness Levels
+layout: page
+title: "Covid Response Policy among Countries with Different Happiness Levels"
+theme: jekyll-theme-cayman
+permalink: https://vladimircao.github.io/final_project/
